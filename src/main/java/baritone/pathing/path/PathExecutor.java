@@ -90,166 +90,7 @@ public class PathExecutor implements IPathExecutor, Helper {
      * not sneaking out over lava), false otherwise
      */
     public boolean onTick() {
-        if (pathPosition == path.length() - 1) {
-            pathPosition++;
-        }
-        if (pathPosition >= path.length()) {
-            return true; // stop bugging me, I'm done
-        }
-        Movement movement = (Movement) path.movements().get(pathPosition);
-        BetterBlockPos whereAmI = ctx.playerFeet();
-        if (!movement.getValidPositions().contains(whereAmI)) {
-            for (int i = 0; i < pathPosition && i < path.length(); i++) {//this happens for example when you lag out and get teleported back a couple blocks
-                if (((Movement) path.movements().get(i)).getValidPositions().contains(whereAmI)) {
-                    int previousPos = pathPosition;
-                    pathPosition = i;
-                    for (int j = pathPosition; j <= previousPos; j++) {
-                        path.movements().get(j).reset();
-                    }
-                    onChangeInPathPosition();
-                    onTick();
-                    return false;
-                }
-            }
-            for (int i = pathPosition + 3; i < path.length() - 1; i++) { //dont check pathPosition+1. the movement tells us when it's done (e.g. sneak placing)
-                // also don't check pathPosition+2 because reasons
-                if (((Movement) path.movements().get(i)).getValidPositions().contains(whereAmI)) {
-                    if (i - pathPosition > 2) {
-                        logDebug("Skipping forward " + (i - pathPosition) + " steps, to " + i);
-                    }
-                    //System.out.println("Double skip sundae");
-                    pathPosition = i - 1;
-                    onChangeInPathPosition();
-                    onTick();
-                    return false;
-                }
-            }
-        }
-        Tuple<Double, BlockPos> status = closestPathPos(path);
-        if (possiblyOffPath(status, MAX_DIST_FROM_PATH)) {
-            ticksAway++;
-            System.out.println("FAR AWAY FROM PATH FOR " + ticksAway + " TICKS. Current distance: " + status.getA() + ". Threshold: " + MAX_DIST_FROM_PATH);
-            if (ticksAway > MAX_TICKS_AWAY) {
-                logDebug("Too far away from path for too long, cancelling path");
-                cancel();
-                return false;
-            }
-        } else {
-            ticksAway = 0;
-        }
-        if (possiblyOffPath(status, MAX_MAX_DIST_FROM_PATH)) { // ok, stop right away, we're way too far.
-            logDebug("too far from path");
-            cancel();
-            return false;
-        }
-        //long start = System.nanoTime() / 1000000L;
-        BlockStateInterface bsi = new BlockStateInterface(ctx);
-        for (int i = pathPosition - 10; i < pathPosition + 10; i++) {
-            if (i < 0 || i >= path.movements().size()) {
-                continue;
-            }
-            Movement m = (Movement) path.movements().get(i);
-            List<BlockPos> prevBreak = m.toBreak(bsi);
-            List<BlockPos> prevPlace = m.toPlace(bsi);
-            List<BlockPos> prevWalkInto = m.toWalkInto(bsi);
-            m.resetBlockCache();
-            if (!prevBreak.equals(m.toBreak(bsi))) {
-                recalcBP = true;
-            }
-            if (!prevPlace.equals(m.toPlace(bsi))) {
-                recalcBP = true;
-            }
-            if (!prevWalkInto.equals(m.toWalkInto(bsi))) {
-                recalcBP = true;
-            }
-        }
-        if (recalcBP) {
-            HashSet<BlockPos> newBreak = new HashSet<>();
-            HashSet<BlockPos> newPlace = new HashSet<>();
-            HashSet<BlockPos> newWalkInto = new HashSet<>();
-            for (int i = pathPosition; i < path.movements().size(); i++) {
-                Movement m = (Movement) path.movements().get(i);
-                newBreak.addAll(m.toBreak(bsi));
-                newPlace.addAll(m.toPlace(bsi));
-                newWalkInto.addAll(m.toWalkInto(bsi));
-            }
-            toBreak = newBreak;
-            toPlace = newPlace;
-            toWalkInto = newWalkInto;
-            recalcBP = false;
-        }
-        /*long end = System.nanoTime() / 1000000L;
-        if (end - start > 0) {
-            System.out.println("Recalculating break and place took " + (end - start) + "ms");
-        }*/
-        if (pathPosition < path.movements().size() - 1) {
-            IMovement next = path.movements().get(pathPosition + 1);
-            if (!behavior.baritone.bsi.worldContainsLoadedChunk(next.getDest().x, next.getDest().z)) {
-                logDebug("Pausing since destination is at edge of loaded chunks");
-                clearKeys();
-                return true;
-            }
-        }
-        boolean canCancel = movement.safeToCancel();
-        if (costEstimateIndex == null || costEstimateIndex != pathPosition) {
-            costEstimateIndex = pathPosition;
-            // do this only once, when the movement starts, and deliberately get the cost as cached when this path was calculated, not the cost as it is right now
-            currentMovementOriginalCostEstimate = movement.getCost();
-            for (int i = 1; i < Baritone.settings().costVerificationLookahead.value && pathPosition + i < path.length() - 1; i++) {
-                if (((Movement) path.movements().get(pathPosition + i)).calculateCost(behavior.secretInternalGetCalculationContext()) >= ActionCosts.COST_INF && canCancel) {
-                    logDebug("Something has changed in the world and a future movement has become impossible. Cancelling.");
-                    cancel();
-                    return true;
-                }
-            }
-        }
-        double currentCost = movement.recalculateCost(behavior.secretInternalGetCalculationContext());
-        if (currentCost >= ActionCosts.COST_INF && canCancel) {
-            logDebug("Something has changed in the world and this movement has become impossible. Cancelling.");
-            cancel();
-            return true;
-        }
-        if (!movement.calculatedWhileLoaded() && currentCost - currentMovementOriginalCostEstimate > Baritone.settings().maxCostIncrease.value && canCancel) {
-            // don't do this if the movement was calculated while loaded
-            // that means that this isn't a cache error, it's just part of the path interfering with a later part
-            logDebug("Original cost " + currentMovementOriginalCostEstimate + " current cost " + currentCost + ". Cancelling.");
-            cancel();
-            return true;
-        }
-        if (shouldPause()) {
-            logDebug("Pausing since current best path is a backtrack");
-            clearKeys();
-            return true;
-        }
-        MovementStatus movementStatus = movement.update();
-        if (movementStatus == UNREACHABLE || movementStatus == FAILED) {
-            logDebug("Movement returns status " + movementStatus);
-            cancel();
-            return true;
-        }
-        if (movementStatus == SUCCESS) {
-            //System.out.println("Movement done, next path");
-            pathPosition++;
-            onChangeInPathPosition();
-            onTick();
-            return true;
-        } else {
-            sprintNextTick = shouldSprintNextTick();
-            if (!sprintNextTick) {
-                ctx.player().setSprinting(false); // letting go of control doesn't make you stop sprinting actually
-            }
-            ticksOnCurrent++;
-            if (ticksOnCurrent > currentMovementOriginalCostEstimate + Baritone.settings().movementTimeoutTicks.value) {
-                // only cancel if the total time has exceeded the initial estimate
-                // as you break the blocks required, the remaining cost goes down, to the point where
-                // ticksOnCurrent is greater than recalculateCost + 100
-                // this is why we cache cost at the beginning, and don't recalculate for this comparison every tick
-                logDebug("This movement has taken too long (" + ticksOnCurrent + " ticks, expected " + currentMovementOriginalCostEstimate + "). Cancelling.");
-                cancel();
-                return true;
-            }
-        }
-        return canCancel; // movement is in progress, but if it reports cancellable, PathingBehavior is good to cut onto the next path
+        return true; // movement is in progress, but if it reports cancellable, PathingBehavior is good to cut onto the next path
     }
 
     private Tuple<Double, BlockPos> closestPathPos(IPath path) {
@@ -584,12 +425,12 @@ public class PathExecutor implements IPathExecutor, Helper {
 
     private void clearKeys() {
         // i'm just sick and tired of this snippet being everywhere lol
-        behavior.baritone.getInputOverrideHandler().clearAllKeys();
+        //behavior.baritone.getInputOverrideHandler().clearAllKeys();
     }
 
     private void cancel() {
         clearKeys();
-        behavior.baritone.getInputOverrideHandler().getBlockBreakHelper().stopBreakingBlock();
+        //behavior.baritone.getInputOverrideHandler().getBlockBreakHelper().stopBreakingBlock();
         pathPosition = path.length() + 3;
         failed = true;
     }
