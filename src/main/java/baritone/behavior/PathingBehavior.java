@@ -146,7 +146,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
             if (current == null) {
                 return;
             }
-            safeToCancel = current.onTick();
+            //safeToCancel = current.onTick();
             if (current.failed() || current.finished()) {
                 current = null;
                 if (goal == null || goal.isInGoal(ctx.playerFeet())) {
