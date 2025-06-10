@@ -134,7 +134,10 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         }
 
         private AbstractAimProcessor(final AbstractAimProcessor source) {
-
+            this.ctx = source.ctx;
+            this.rand = source.rand.fork();
+            this.randomYawOffset = source.randomYawOffset;
+            this.randomPitchOffset = source.randomPitchOffset;
         }
 
         @Override
