@@ -109,9 +109,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
 
     @Override
     public void onPlayerSprintState(SprintStateEvent event) {
-        if (isPathing()) {
-            event.setState(current.isSprinting());
-        }
+
     }
 
     private void tickPath() {
@@ -119,8 +117,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         if (pauseRequestedLastTick && safeToCancel) {
             pauseRequestedLastTick = false;
             if (unpausedLastTick) {
-                baritone.getInputOverrideHandler().clearAllKeys();
-                baritone.getInputOverrideHandler().getBlockBreakHelper().stopBreakingBlock();
+
             }
             unpausedLastTick = false;
             pausedThisTick = true;
@@ -129,7 +126,6 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
         unpausedLastTick = true;
         if (cancelRequested) {
             cancelRequested = false;
-            baritone.getInputOverrideHandler().clearAllKeys();
         }
         synchronized (pathPlanLock) {
             synchronized (pathCalcLock) {
@@ -157,9 +153,6 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                     logDebug("All done. At " + goal);
                     queuePathEvent(PathEvent.AT_GOAL);
                     next = null;
-                    if (Baritone.settings().disconnectOnArrival.value) {
-                        ctx.world().disconnect();
-                    }
                     return;
                 }
                 if (next != null && !next.getPath().positions().contains(ctx.playerFeet()) && !next.getPath().positions().contains(expectedSegmentStart)) { // can contain either one
@@ -178,7 +171,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                     queuePathEvent(PathEvent.CONTINUING_ONTO_PLANNED_NEXT);
                     current = next;
                     next = null;
-                    current.onTick(); // don't waste a tick doing nothing, get started right away
+                    //current.onTick(); // don't waste a tick doing nothing, get started right away
                     return;
                 }
                 // at this point, current just ended, but we aren't in the goal and have no plan for the future
@@ -200,7 +193,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
                 queuePathEvent(PathEvent.SPLICING_ONTO_NEXT_EARLY);
                 current = next;
                 next = null;
-                current.onTick();
+                //current.onTick();
                 return;
             }
             if (Baritone.settings().splicePath.value) {
@@ -236,19 +229,7 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
 
     @Override
     public void onPlayerUpdate(PlayerUpdateEvent event) {
-        if (current != null) {
-            switch (event.getState()) {
-                case PRE:
-                    lastAutoJump = ctx.minecraft().options.autoJump().get();
-                    ctx.minecraft().options.autoJump().set(false);
-                    break;
-                case POST:
-                    ctx.minecraft().options.autoJump().set(lastAutoJump);
-                    break;
-                default:
-                    break;
-            }
-        }
+
     }
 
     public void secretInternalSetGoal(Goal goal) {
@@ -362,8 +343,6 @@ public final class PathingBehavior extends Behavior implements IPathingBehavior,
             if (current != null) {
                 current = null;
                 next = null;
-                baritone.getInputOverrideHandler().clearAllKeys();
-                baritone.getInputOverrideHandler().getBlockBreakHelper().stopBreakingBlock();
             }
         }
     }

@@ -201,7 +201,8 @@ public final class LookBehavior extends Behavior implements ILookBehavior {
         }
 
         private AbstractAimProcessor(final AbstractAimProcessor source) {
-
+            ctx = source.ctx;
+            rand = source.rand;
         }
 
         @Override
